@@ -222,11 +222,13 @@ with st.sidebar:
         limpar_historico(st.session_state.usuario_id)
         st.session_state.messages = []
         st.rerun()
-
+        
     if st.button("🚪 Sair"):
-        cookies["usuario_id"] = ""
-        cookies["username"] = ""
-        cookies.save()
+        if "usuario_id" in cookies:
+            del cookies["usuario_id"]
+        if "username" in cookies:
+            del cookies["username"]
+        cookies.save()  
         for key in list(st.session_state.keys()):
             del st.session_state[key]
         st.rerun()

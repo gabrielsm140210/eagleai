@@ -211,7 +211,7 @@ with st.sidebar:
     st.markdown("---")
     st.markdown("#### 👨‍💻 Desenvolvedor")
     st.markdown("**Feito por:** Gabriel S. Monteiro")
-    st.markdown("**Cargo:** Engenheiro e Desenvolvedor de Software")
+    st.markdown("**Engenheiro e Desenvolvedor de Software**")
 
     st.markdown("---")
     st.markdown("#### 📊 Status do Sistema")

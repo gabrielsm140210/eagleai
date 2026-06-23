@@ -125,7 +125,10 @@ def limpar_historico(usuario_id):
     except Exception:
         pass
 
-if "usuario_id" not in st.session_state:
+if "logout_efetuado" not in st.session_state:
+    st.session_state.logout_efetuado = False
+
+if "usuario_id" not in st.session_state and not st.session_state.logout_efetuado:
     cookie_uid = cookies.get("usuario_id")
     cookie_username = cookies.get("username")
     if cookie_uid and cookie_username:
@@ -228,9 +231,10 @@ with st.sidebar:
             del cookies["usuario_id"]
         if "username" in cookies:
             del cookies["username"]
-        cookies.save()  
+        cookies.save()
         for key in list(st.session_state.keys()):
             del st.session_state[key]
+        st.session_state.logout_efetuado = True
         st.rerun()
 
 nvidia_api_key = os.environ.get("NVIDIA_API_KEY")

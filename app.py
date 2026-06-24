@@ -8,6 +8,8 @@ import warnings
 
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
+status_placeholder = st.empty()
+
 load_dotenv()
 
 from langchain_core.prompts import ChatPromptTemplate
@@ -208,31 +210,33 @@ with st.sidebar:
 
     st.markdown("⚡ **Modo de Resposta**")
     modo_velocidade = st.selectbox(
-    "Escolha a velocidade da IA:",
-    ["Águia Veloz (Mais Rápido ⚡)", "Águia Suprema (Mais Inteligente 🧠)"]
-)
-if modo_velocidade == "Águia Veloz (Mais Rápido ⚡)":
-    modelo_selecionado = "meta/llama-3.1-8b-instruct"
-    max_tokens_modo = 400
-else:
-    modelo_selecionado = "meta/llama-3.3-70b-instruct"
-    max_tokens_modo = 800
+        "Escolha a velocidade da IA:",
+        ["Águia Veloz (Mais Rápido ⚡)", "Águia Suprema (Mais Inteligente 🧠)"]
+    )
+    
+    if modo_velocidade == "Águia Veloz (Mais Rápido ⚡)":
+        modelo_selecionado = "meta/llama-3.1-8b-instruct"
+        max_tokens_modo = 400
+    else:
+        modelo_selecionado = "meta/llama-3.3-70b-instruct"
+        max_tokens_modo = 800
 
     st.markdown("---")
 
     st.markdown("#### 📋 Sobre o projeto")
-    st.markdown("**🧠 Modelo:** `meta/llama-3.3-70b-instruct` (NVIDIA)")
+    st.markdown(f"**🧠 Modelo ativo:** `{modelo_selecionado}`")
     st.markdown("**🌐 Busca na web:** Tavily Search API")
     st.markdown("**⚙️ Arquitetura:** LLM + Tool Calling")
 
     st.markdown("---")
     st.markdown("#### 👨‍💻 Desenvolvedor")
     st.markdown("**Feito por:** Gabriel S. Monteiro")
-    st.markdown("**Engenheiro e Desenvolvedor de Software**")
+    st.markdown("**Cargo:** Engenheiro e Desenvolvedor de Software")
 
     st.markdown("---")
     st.markdown("#### 📊 Status do Sistema")
-    status_placeholder = st.empty()
+    
+    status_area = st.empty()
 
     st.markdown("---")
     if st.button("🗑️ Limpar Conversa"):

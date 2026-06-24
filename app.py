@@ -206,6 +206,20 @@ with st.sidebar:
     st.markdown(f"👤 **Usuário:** {st.session_state.username}")
     st.markdown("---")
 
+    st.markdown("⚡ **Modo de Resposta**")
+    modo_velocidade = st.selectbox(
+    "Escolha a velocidade da IA:",
+    ["Águia Veloz (Mais Rápido ⚡)", "Águia Suprema (Mais Inteligente 🧠)"]
+)
+if modo_velocidade == "Águia Veloz (Mais Rápido ⚡)":
+    modelo_selecionado = "meta/llama-3.1-8b-instruct"
+    max_tokens_modo = 400
+else:
+    modelo_selecionado = "meta/llama-3.3-70b-instruct"
+    max_tokens_modo = 800
+
+    st.markdown("---")
+
     st.markdown("#### 📋 Sobre o projeto")
     st.markdown("**🧠 Modelo:** `meta/llama-3.3-70b-instruct` (NVIDIA)")
     st.markdown("**🌐 Busca na web:** Tavily Search API")
@@ -287,10 +301,10 @@ except Exception as e:
 
 try:
     llm = ChatNVIDIA(
-        model="meta/llama-3.3-70b-instruct",
+        model=modelo_selecionado,
         nvidia_api_key=nvidia_api_key,
         temperature=0.3,
-        max_tokens=800
+        max_tokens=max_tokens_modo
     )
 except Exception as e:
     with status_placeholder.container():
@@ -343,22 +357,18 @@ if prompt_usuario := st.chat_input("Pergunte qualquer coisa..."):
     with st.chat_message("assistant"):
         try:
             try:
-                deteccao = llm.invoke(
-                    f"Qual é o idioma desta frase? Responda APENAS com o nome do idioma em português. Frase: '{prompt_usuario}'"
-                ).content.strip()
-                idioma = deteccao
+                from langdetect import detect
+                idioma_cod = detect(prompt_usuario)
+                idioma = "português" if idioma_cod == "pt" else "inglês" if idioma_cod == "en" else "espanhol" if idioma_cod == "es" else "português"
             except Exception:
                 idioma = "português"
 
-            decisao_prompt = f"""Você é um assistente que decide se uma pergunta precisa de busca na web ou não.
-
-Responda APENAS com "SIM" se a pergunta precisar de informações atuais, notícias, dados recentes ou fatos específicos que mudam com o tempo.
-Responda APENAS com "NAO" se for uma pergunta simples, conceitual, matemática, de conversação ou que você já sabe com segurança.
-
+            decisao_prompt = f"""Você decide se uma pergunta precisa de busca na web.
+Responda APENAS com "SIM" ou "NAO". Sem justificativas.
 Pergunta: {prompt_usuario}
-Resposta (SIM ou NAO):"""
+Resposta:"""
 
-            decisao = llm.invoke(decisao_prompt).content.strip().upper()
+            decisao = llm.invoke(decisao_prompt, max_tokens=2).content.strip().upper()
             precisa_buscar = "SIM" in decisao
 
             if precisa_buscar:

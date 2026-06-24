@@ -8,7 +8,8 @@ import warnings
 
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
-status_placeholder = st.empty()
+with st.sidebar:
+    status_placeholder = st.empty()
 
 load_dotenv()
 
@@ -231,7 +232,7 @@ with st.sidebar:
     st.markdown("---")
     st.markdown("#### 👨‍💻 Desenvolvedor")
     st.markdown("**Feito por:** Gabriel S. Monteiro")
-    st.markdown("**Cargo:** Engenheiro e Desenvolvedor de Software")
+    st.markdown("**Engenheiro e Desenvolvedor de Software**")
 
     st.markdown("---")
     st.markdown("#### 📊 Status do Sistema")

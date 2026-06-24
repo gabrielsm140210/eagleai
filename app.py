@@ -8,9 +8,6 @@ import warnings
 
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
-with st.sidebar:
-    status_placeholder = st.empty()
-
 load_dotenv()
 
 from langchain_core.prompts import ChatPromptTemplate
@@ -232,12 +229,12 @@ with st.sidebar:
     st.markdown("---")
     st.markdown("#### 👨‍💻 Desenvolvedor")
     st.markdown("**Feito por:** Gabriel S. Monteiro")
-    st.markdown("**Engenheiro e Desenvolvedor de Software**")
+    st.markdown("** Engenheiro e Desenvolvedor de Software**")
 
     st.markdown("---")
     st.markdown("#### 📊 Status do Sistema")
     
-    status_area = st.empty()
+    status_placeholder = st.empty()
 
     st.markdown("---")
     if st.button("🗑️ Limpar Conversa"):
@@ -333,7 +330,7 @@ Resultados de busca na web (podem estar vazios se não foram necessários):
 Instruções:
 - Se os resultados da busca forem relevantes, use-os para enriquecer sua resposta e cite a fonte.
 - Se a pergunta for simples ou você já souber a resposta com segurança, responda com seu próprio conhecimento.
-- Se for usar buscas, busque por fontes recentes, ou seja, de 2025 em diante.
+- Se for usar buscas, বুকে por fontes recentes, ou seja, de 2025 em diante.
 - Nunca invente dados, datas ou estatísticas. Se não tiver certeza, diga isso claramente.
 - Seja direto: evite textos longos desnecessários.
 

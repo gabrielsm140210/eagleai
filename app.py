@@ -214,10 +214,10 @@ with st.sidebar:
     
     if modo_velocidade == "Águia Veloz (Mais Rápido ⚡)":
         modelo_selecionado = "meta/llama-3.1-8b-instruct"
-        max_tokens_modo = 400
+        max_tokens_modo = 2048
     else:
         modelo_selecionado = "meta/llama-3.3-70b-instruct"
-        max_tokens_modo = 800
+        max_tokens_modo = 4069
 
     st.markdown("---")
 

@@ -344,7 +344,7 @@ Resultados de busca na web (podem estar vazios se não foram necessários):
 
 Instruções:
 - Sempre responda de acordo, com as conversas anteriores que o usuário fez com você ( caso ele não dizer claramente que mudou de assunto )
-- Se os resultados da busca forem relevantes, use-os para enriquecer sua resposta e cite a fonte.
+- Se os resultados da busca forem relevantes, use-os para enriquecer sua resposta.
 - Se a pergunta for simples ou você já souber a resposta com segurança, responda com seu próprio conhecimento.
 - Se for usar buscas, busque por sites e notícias mais recentes, ou seja, de 2025 em diante.
 - Nunca invente dados, datas ou estatísticas. Se não tiver certeza, diga isso claramente.

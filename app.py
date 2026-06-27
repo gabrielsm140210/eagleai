@@ -6,7 +6,7 @@ from supabase import create_client
 from streamlit_cookies_manager import EncryptedCookieManager
 import warnings 
 import requests
-from openai import OpenAI 
+from openai import OpenAI
 
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
@@ -131,9 +131,9 @@ def limpar_historico(usuario_id):
     except Exception:
         pass
 
-def deletar_historico_a_partir_de(usuario_id, mensagem_id):
+def deletar_historico_a_partir_de(usuario_id, message_id):
     try:
-        msg = supabase.table("historico").select("criado_em").eq("id", mensagem_id).execute()
+        msg = supabase.table("historico").select("criado_em").eq("id", message_id).execute()
         if msg.data:
             data_limite = msg.data[0]["criado_em"]
             supabase.table("historico").delete().eq("usuario_id", usuario_id).gte("criado_em", data_limite).execute()
@@ -247,11 +247,6 @@ with st.sidebar:
     st.markdown("**⚙️ Arquitetura:** LLM + Tool Calling")
 
     st.markdown("---")
-    st.markdown("#### 👨‍💻 Desenvolvedor")
-    st.markdown("**Feito por:** Gabriel S. Monteiro")
-    st.markdown("**Cargo:** Engenheiro e Desenvolvedor de Software")
-
-    st.markdown("---")
     st.markdown("#### 📊 Status do Sistema")
     
     status_placeholder = st.empty()
@@ -277,6 +272,7 @@ with st.sidebar:
 
 nvidia_api_key = os.environ.get("NVIDIA_API_KEY")
 tavily_api_key = os.environ.get("TAVILY_API_KEY")
+groq_api_key = os.environ.get("GROQ_API_KEY")
 
 if not nvidia_api_key:
     try:
@@ -309,18 +305,28 @@ with status_placeholder.container():
     st.markdown('<div class="status-ok">🟢 Busca web (Tavily) conectada</div>', unsafe_allow_html=True)
 
 def transcrever_audio_nvidia(audio_bytes):
+    if groq_api_key:
+        try:
+            client = OpenAI(base_url="https://api.groq.com/openai/v1", api_key=groq_api_key)
+            audio_tuple = ("audio.wav", audio_bytes, "audio/wav")
+            completion = client.audio.transcriptions.create(
+                model="whisper-large-v3",
+                file=audio_tuple,
+                language="pt",
+                response_format="json"
+            )
+            return completion.text
+        except Exception:
+            pass
     try:
         url = "https://ai.api.nvidia.com/v1/audio/transcriptions"
-        
         headers = {
             "Authorization": f"Bearer {nvidia_api_key}",
             "Accept": "application/json"
         }
-        
         files = {
             "audio": ("audio.wav", audio_bytes, "audio/wav")
         }
-
         data = {
             "model": "nvidia/canary-1b",
             "language": "pt",
@@ -328,20 +334,18 @@ def transcrever_audio_nvidia(audio_bytes):
         }
         
         resposta = requests.post(url, headers=headers, files=files, data=data)
-
+        
         if resposta.status_code == 404:
-            url_direta = "https://ai.api.nvidia.com/v1/audio/nvidia/canary-1b"
-            data_direta = {"language": "pt", "response_format": "json"}
-            resposta = requests.post(url_direta, headers=headers, files=files, data=data_direta)
-
+            url_direct_nim = "https://ai.api.nvidia.com/v1/audio/nvidia/canary-1b"
+            data_direct = {"language": "pt", "response_format": "json"}
+            resposta = requests.post(url_direct_nim, headers=headers, files=files, data=data_direct)
+            
         if resposta.status_code == 200:
             return resposta.json().get("text", "")
         else:
-            st.error(f"Erro na API da NVIDIA ({resposta.status_code}): {resposta.text}")
-            return ""
+            return "[Aviso: Falha de comunicação com o servidor de voz da NVIDIA. Por favor, utilize o chat de texto por enquanto.]"
             
     except Exception as e:
-        st.error(f"Erro crítico no processamento de áudio: {str(e)}")
         return ""
 
 
@@ -489,8 +493,13 @@ else:
             
             if texto_transcrito and len(texto_transcrito.strip()) > 2:
                 prompt_usuario = texto_transcrito
-                with st.chat_message("user"):
-                    st.write(prompt_usuario)
+                
+                if "[Aviso:" in texto_transcrito:
+                    st.warning(texto_transcrito)
+                    prompt_usuario = None
+                else:
+                    with st.chat_message("user"):
+                        st.write(prompt_usuario)
 
     if prompt_usuario:
         novo_id = salvar_mensagem(st.session_state.usuario_id, "user", prompt_usuario)

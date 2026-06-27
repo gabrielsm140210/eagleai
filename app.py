@@ -371,10 +371,14 @@ else:
         )
         
         if audio_gravado and "bytes" in audio_gravado:
-            with st.spinner("🎧 Transcrevendo..."):
-                texto_transcrito = transcrever_audio_nvidia(audio_gravado["bytes"])
-                if texto_transcrito and len(texto_transcrito.strip()) > 2:
-                    prompt_usuario = texto_transcrito
+            aviso_transcricao = st.info("🎧 Processando sua voz...")
+            texto_transcrito = transcrever_audio_nvidia(audio_gravado["bytes"])
+            aviso_transcricao.empty() # Remove o aviso da tela após transcrever
+            
+            if texto_transcrito and len(texto_transcrito.strip()) > 2:
+                prompt_usuario = texto_transcrito
+                with st.chat_message("user"):
+                    st.write(prompt_usuario)
 
     if prompt_usuario:
         novo_id = salvar_mensagem(st.session_state.usuario_id, "user", prompt_usuario)

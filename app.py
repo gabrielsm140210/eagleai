@@ -309,32 +309,32 @@ with status_placeholder.container():
 
 def transcrever_audio_nvidia(audio_bytes):
     try:
-        from langchain_nvidia_ai_endpoints import NVIDIAEmbeddings, ChatNVIDIA
-        import json
-
-        cliente_audio = ChatNVIDIA(
-            model="nvidia/canary-1b", 
-            nvidia_api_key=nvidia_api_key
-        )
-
+        url = "https://ai.api.nvidia.com/v1/audio/transcriptions"
+        
         headers = {
             "Authorization": f"Bearer {nvidia_api_key}",
             "Accept": "application/json"
         }
-
-        url_unificada = "https://ai.api.nvidia.com/v1/v1/chat/completions" 
-        url_audio_real = "https://ai.api.nvidia.com/v1/audio/transcriptions"
-
-        url_core = "https://api.nvidia.com/v1/audio/transcriptions"
         
-        files = {"audio": ("audio.wav", audio_bytes, "audio/wav")}
-        data = {"model": "nvidia/canary-1b", "language": "pt"}
+        files = {
+            "audio": ("audio.wav", audio_bytes, "audio/wav")
+        }
         
-        resposta = requests.post(url_core, headers=headers, files=files, data=data)
+        data = {
+            "model": "nvidia/canary-1b",
+            "language": "pt",
+            "response_format": "json"
+        }
 
+        import urllib3
+        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+        
+        resposta = requests.post(url, headers=headers, files=files, data=data, verify=False)
+        
         if resposta.status_code == 404:
-            url_modelo_direto = "https://ai.api.nvidia.com/v1/models/nvidia/canary-1b"
-            resposta = requests.post(url_modelo_direto, headers=headers, files=files, data=data)
+            url_alt = "https://ai.api.nvidia.com/v1/audio/nvidia/canary-1b"
+            data_alt = {"language": "pt", "response_format": "json"}
+            resposta = requests.post(url_alt, headers=headers, files=files, data=data_alt, verify=False)
 
         if resposta.status_code == 200:
             return resposta.json().get("text", "")

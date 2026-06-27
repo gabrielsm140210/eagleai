@@ -6,6 +6,7 @@ from supabase import create_client
 from streamlit_cookies_manager import EncryptedCookieManager
 import warnings 
 import requests
+from openai import OpenAI 
 
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
@@ -309,43 +310,30 @@ with status_placeholder.container():
 
 def transcrever_audio_nvidia(audio_bytes):
     try:
-        url = "https://ai.api.nvidia.com/v1/audio/transcriptions"
-        
-        headers = {
-            "Authorization": f"Bearer {nvidia_api_key}",
-            "Accept": "application/json"
-        }
-        
-        files = {
-            "audio": ("audio.wav", audio_bytes, "audio/wav")
-        }
-        
-        data = {
-            "model": "nvidia/canary-1b",
-            "language": "pt",
-            "response_format": "json"
-        }
+        client = OpenAI(
+            base_url="https://integrate.api.nvidia.com/v1",
+            api_key=nvidia_api_key
+        )
 
-        import urllib3
-        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+        audio_file_tuple = ("audio.wav", audio_bytes, "audio/wav")
         
-        resposta = requests.post(url, headers=headers, files=files, data=data, verify=False)
+        completion = client.audio.transcriptions.create(
+            model="nvidia/canary-1b",
+            file=audio_file_tuple,
+            response_format="json"
+        )
         
-        if resposta.status_code == 404:
-            url_alt = "https://ai.api.nvidia.com/v1/audio/nvidia/canary-1b"
-            data_alt = {"language": "pt", "response_format": "json"}
-            resposta = requests.post(url_alt, headers=headers, files=files, data=data_alt, verify=False)
-
-        if resposta.status_code == 200:
-            return resposta.json().get("text", "")
-        else:
-            st.error(f"Erro na API da NVIDIA ({resposta.status_code}): {resposta.text}")
-            return ""
-            
-    except Exception as e:
-        st.error(f"Erro crítico no processamento de áudio: {str(e)}")
+        if hasattr(completion, 'text'):
+            return completion.text
+        elif isinstance(completion, dict):
+            return completion.get("text", "")
         return ""
         
+    except Exception as e:
+        st.error(f"Erro no processamento nativo de áudio (NVIDIA/OpenAI SDK): {str(e)}")
+        return ""
+
+
 template_prompt = """
 Você é a Eagle AI, um assistente de inteligência artificial avançado criado, desenvolvido e programado por Gabriel S. Monteiro.
 

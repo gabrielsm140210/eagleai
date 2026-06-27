@@ -411,7 +411,6 @@ def transcrever_audio_nvidia(audio_bytes):
     except Exception:
         return ""
 
-
 template_prompt = """
 Você é a Eagle AI, um assistente de inteligência artificial avançado criado, desenvolvido e programado por Gabriel S. Monteiro.
 
@@ -470,27 +469,42 @@ def processar_resposta_ia(texto_prompt):
         except Exception:
             idioma = "português"
 
-        decisao_prompt = f"Você decide se uma pergunta precisa de busca na web. Responda APENAS com 'SIM' ou 'NAO'.\nPergunta: {texto_prompt}\nResposta:"
+        historico_breve = ""
+        for msg in st.session_state.messages[-3:-1]:
+            role_label = "Usuário" if msg["role"] == "user" else "Eagle AI"
+            historico_breve += f"{role_label}: {msg['content']}\n"
+            
+        decisao_prompt = f"Você decide se a última pergunta precisa de busca na web. Responda APENAS com 'SIM' ou 'NAO'.\nHistórico recente:\n{historico_breve}\nÚltima Pergunta: {texto_prompt}\nResposta:"
         decisao = llm.invoke(decisao_prompt, max_tokens=2).content.strip().upper()
         precisa_buscar = "SIM" in decisao
 
         if precisa_buscar:
             with st.spinner("🔎 Buscando na web..."):
                 resultados = busca_web.invoke({"query": texto_prompt})
-                contexto = "\n\n".join(f"Fonte: {r.get('url', 'desconhecida')}\nConteúdo: {r.get('content', '')}" for r in resultados)
+                contexto_web = "\n\n".join(f"Fonte: {r.get('url', 'desconhecida')}\nConteúdo: {r.get('content', '')}" for r in resultados)
         else:
-            contexto = "Nenhuma busca realizada. Use seu próprio conhecimento."
+            contexto_web = "Nenhuma busca recente necessária."
 
-        with st.spinner("🦅 Gerando resposta..."):
-            resposta = cadeia_resposta.invoke({
-                "context": contexto,
-                "question": texto_prompt,
-                "idioma": idioma
-            })
+        sistema_final = sistema_template + f"\nResultados de busca na web para a pergunta atual:\n{contexto_web}"
+
+        from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
+        payload_mensagens = [SystemMessage(content=sistema_final)]
+
+        for msg in st.session_state.messages[:-1]:
+            if msg["role"] == "user":
+                payload_mensagens.append(HumanMessage(content=msg["content"]))
+            else:
+                payload_mensagens.append(AIMessage(content=msg["content"]))
+
+        payload_mensagens.append(HumanMessage(content=texto_prompt))
+
+        with st.spinner("🦅 Gerando resposta com memória nativa..."):
+            resposta = llm.invoke(payload_mensagens).content
+            
         return resposta
     except Exception as e:
         return f"Erro ao processar sua pergunta: {e}"
-
+        
 if st.session_state.edit_index is not None:
     st.markdown("---")
     st.markdown("### ✏️ Editando mensagem anterior")

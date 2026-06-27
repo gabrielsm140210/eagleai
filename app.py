@@ -72,7 +72,6 @@ st.markdown(f"""
         font-weight: 600;
         margin-bottom: 0.4rem;
     }}
-    /* Estilização para os botões de histórico na barra lateral */
     .stSidebar .stButton > button {{
         text-align: left !important;
         justify-content: flex-start !important;
@@ -148,6 +147,13 @@ def listar_sessoes_do_usuario(usuario_id):
     except Exception:
         return []
 
+def atualizar_titulo_da_sessao(usuario_id, sessao_id, novo_titulo):
+    try:
+        supabase.table("historico").update({"titulo_sessao": novo_titulo[:30]}).eq("usuario_id", usuario_id).eq("sessao_id", str(sessao_id)).execute()
+        return True
+    except Exception:
+        return False
+
 def limpar_sessao_especifica(usuario_id, sessao_id):
     try:
         supabase.table("historico").delete().eq("usuario_id", usuario_id).eq("sessao_id", str(sessao_id)).execute()
@@ -183,6 +189,8 @@ if "edit_index" not in st.session_state:
     st.session_state.edit_index = None
 if "edit_msg_id" not in st.session_state:
     st.session_state.edit_msg_id = None
+if "sessao_renomeando" not in st.session_state:
+    st.session_state.sessao_renomeando = None
 
 if "usuario_id" not in st.session_state:
     st.markdown("""
@@ -259,6 +267,7 @@ with st.sidebar:
         st.session_state.messages = []
         st.session_state.edit_index = None
         st.session_state.edit_msg_id = None
+        st.session_state.sessao_renomeando = None
         st.rerun()
         
     st.markdown("---")
@@ -267,33 +276,55 @@ with st.sidebar:
     historico_sessoes = listar_sessoes_do_usuario(st.session_state.usuario_id)
     
     if not historico_sessoes:
-        st.caption("Nenhum chat salvos ainda.")
+        st.caption("Nenhum chat salvo ainda.")
     else:
         for sessao in historico_sessoes:
-            col_link, col_lixeira = st.columns([0.82, 0.18])
-            
-            with col_link:
-                label_botao = f"⚫ {sessao['titulo']}" if sessao['sessao_id'] != st.session_state.sessao_atual_id else f"🔵 {sessao['titulo']}"
-                if st.button(label_botao, key=f"sess_{sessao['sessao_id']}", use_container_width=True):
-                    st.session_state.sessao_atual_id = sessao['sessao_id']
-                    st.session_state.titulo_atual = sessao['titulo']
-                    st.session_state.messages = carregar_historico_da_sessao(st.session_state.usuario_id, sessao['sessao_id'])
-                    st.session_state.edit_index = None
-                    st.session_state.edit_msg_id = None
-                    st.rerun()
-            
-            with col_lixeira:
-                if st.button("🗑️", key=f"del_{sessao['sessao_id']}", help="Excluir esta conversa"):
-                    limpar_sessao_especifica(st.session_state.usuario_id, sessao['sessao_id'])
-
-                    if sessao['sessao_id'] == st.session_state.sessao_atual_id:
-                        st.session_state.sessao_atual_id = str(uuid.uuid4())
-                        st.session_state.titulo_atual = "Conversa Nova"
-                        st.session_state.messages = []
+            if st.session_state.sessao_renomeando == sessao['sessao_id']:
+                with st.form(key=f"form_renomear_{sessao['sessao_id']}", clear_on_submit=True):
+                    novo_titulo_input = st.text_input("Novo título:", value=sessao['titulo'], max_chars=30)
+                    col_f1, col_f2 = st.columns(2)
+                    with col_f1:
+                        if st.form_submit_button("💾"):
+                            if novo_titulo_input.strip():
+                                atualizar_titulo_da_sessao(st.session_state.usuario_id, sessao['sessao_id'], novo_titulo_input.strip())
+                                if sessao['sessao_id'] == st.session_state.sessao_atual_id:
+                                    st.session_state.titulo_atual = novo_titulo_input.strip()
+                                st.session_state.sessao_renomeando = None
+                                st.rerun()
+                    with col_f2:
+                        if st.form_submit_button("❌"):
+                            st.session_state.sessao_renomeando = None
+                            st.rerun()
+            else:
+                col_link, col_editar, col_lixeira = st.columns([0.66, 0.17, 0.17])
+                
+                with col_link:
+                    label_botao = f"⚫ {sessao['titulo']}" if sessao['sessao_id'] != st.session_state.sessao_atual_id else f"🔵 {sessao['titulo']}"
+                    if st.button(label_botao, key=f"sess_{sessao['sessao_id']}", use_container_width=True):
+                        st.session_state.sessao_atual_id = sessao['sessao_id']
+                        st.session_state.titulo_atual = sessao['titulo']
+                        st.session_state.messages = carregar_historico_da_sessao(st.session_state.usuario_id, sessao['sessao_id'])
                         st.session_state.edit_index = None
                         st.session_state.edit_msg_id = None
-                        
-                    st.rerun()
+                        st.rerun()
+                
+                with col_editar:
+                    if st.button("✏️", key=f"edit_hist_{sessao['sessao_id']}", help="Editar título da conversa"):
+                        st.session_state.sessao_renomeando = sessao['sessao_id']
+                        st.rerun()
+
+                with col_lixeira:
+                    if st.button("🗑️", key=f"del_{sessao['sessao_id']}", help="Excluir esta conversa"):
+                        limpar_sessao_especifica(st.session_state.usuario_id, sessao['sessao_id'])
+
+                        if sessao['sessao_id'] == st.session_state.sessao_atual_id:
+                            st.session_state.sessao_atual_id = str(uuid.uuid4())
+                            st.session_state.titulo_atual = "Conversa Nova"
+                            st.session_state.messages = []
+                            st.session_state.edit_index = None
+                            st.session_state.edit_msg_id = None
+                            
+                        st.rerun()
 
     st.markdown("---")
 
@@ -441,7 +472,7 @@ def processar_resposta_ia(texto_prompt):
         for msg in st.session_state.messages[-3:-1]:
             role_label = "Usuário" if msg["role"] == "user" else "Eagle AI"
             historico_breve += f"{role_label}: {msg['content']}\n"
-
+            
         decisao_prompt = (
             f"Você é um classificador de buscas em tempo real. Analise o contexto do chat e decida se a última pergunta exige dados atualizados da internet "
             f"(como eventos atuais de 2026, transmissões de TV, notícias, placares ou fatos recentes). "
@@ -487,7 +518,7 @@ Você é a Eagle AI, um assistente de inteligência artificial avançado criado,
 
 INFORMAÇÃO CRUCIAL SOBRE O SEU CRIADOR:
 Se o usuário perguntar sobre "Gabriel S. Monteiro", "Gabriel Monteiro", "Gabriel" (no contexto de criador/desenvolvedor) ou "quem te criou", use o seguinte perfil oficial para responder com orgulho e precisão:
-- Gabriel S. Monteiro é um Engenheiro e Desenvolvedor de Software focado in Inteligência Artificial, automação de processos e arquitetura de dados.
+- Gabriel S. Monteiro é um Engenheiro e Desenvolvedor de Software focado em Inteligência Artificial, automação de processos e arquitetura de dados.
 - Ele tem forte expertise no desenvolvimento de soluções completas (Full Stack) e integração de grandes modelos de linguagem (LLMs) com bancos de dados relacionais e ferramentas de busca em tempo real.
 - É o fundador e a mente brilhante por trás da Eagle AI, tendo projetado toda a sua infraestrutura, desde o sistema de segurança e cookies assíncronos até a lógica de otimização de velocidade de tokens e conexão com APIs como NVIDIA e Supabase.
 - Ele desenvolveu este assistente para demonstrar o poder de arquiteturas modernas de IA (LLM + Tool Calling) aplicadas ao mercado corporativo e planos de software como serviço (SaaS).
@@ -524,7 +555,7 @@ ATENÇÃO: O idioma da pergunta é {idioma}. Você DEVE responder OBRIGATORIAMEN
         return resposta
     except Exception as e:
         return f"Erro ao processar sua pergunta: {e}"
-        
+
 if st.session_state.edit_index is not None:
     st.markdown("---")
     st.markdown("### ✏️ Editando mensagem anterior")
@@ -545,6 +576,7 @@ if st.session_state.edit_index is not None:
                 
                 if st.session_state.edit_index == 0:
                     st.session_state.titulo_atual = novo_texto_input[:25]
+                    atualizar_titulo_da_sessao(st.session_state.usuario_id, st.session_state.sessao_atual_id, st.session_state.titulo_atual)
                 
                 novo_id = salvar_mensagem(st.session_state.usuario_id, st.session_state.sessao_atual_id, "user", novo_texto_input, st.session_state.titulo_atual)
                 st.session_state.messages.append({"id": novo_id, "role": "user", "content": novo_texto_input})
@@ -569,6 +601,14 @@ if st.session_state.edit_index is not None:
             st.rerun()
 
 else:
+    if st.session_state.messages and st.session_state.messages[-1]["role"] == "user":
+        ultimo_prompt = st.session_state.messages[-1]["content"]
+        resposta_ia = processar_resposta_ia(ultimo_prompt)
+        
+        id_ia = salvar_mensagem(st.session_state.usuario_id, st.session_state.sessao_atual_id, "assistant", resposta_ia, st.session_state.titulo_atual)
+        st.session_state.messages.append({"id": id_ia, "role": "assistant", "content": resposta_ia})
+        st.rerun()
+
     col_chat, col_voice = st.columns([0.83, 0.17])
     prompt_usuario = None
 
@@ -607,14 +647,6 @@ else:
         novo_id = salvar_mensagem(st.session_state.usuario_id, st.session_state.sessao_atual_id, "user", prompt_usuario, st.session_state.titulo_atual)
         st.session_state.messages.append({"id": novo_id, "role": "user", "content": prompt_usuario})
         st.rerun()
-
-if st.session_state.messages and st.session_state.messages[-1]["role"] == "user" and st.session_state.edit_index is None:
-    ultimo_prompt = st.session_state.messages[-1]["content"]
-    resposta_ia = processar_resposta_ia(ultimo_prompt)
-    
-    id_ia = salvar_mensagem(st.session_state.usuario_id, st.session_state.sessao_atual_id, "assistant", resposta_ia, st.session_state.titulo_atual)
-    st.session_state.messages.append({"id": id_ia, "role": "assistant", "content": resposta_ia})
-    st.rerun()
 
 st.markdown(
     "<div style='text-align:center; color:gray; font-size:0.8rem; margin-top:2rem;'>"

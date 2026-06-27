@@ -309,23 +309,28 @@ with status_placeholder.container():
 
 def transcrever_audio_nvidia(audio_bytes):
     try:
-        url = "https://ai.api.nvidia.com/v1/audio/nvidia/canary-1b"
-        headers = {"Authorization": f"Bearer {nvidia_api_key}"}
-        files = {"audio": ("audio.wav", audio_bytes, "audio/wav")}
-        data = {
-            "language": "pt",
-            "response_format": "json"
+        url = "https://ai.api.nvidia.com/v1/audio/transcriptions"
+        
+        headers = {
+            "Authorization": f"Bearer {nvidia_api_key}",
+
+            "Accept": "application/json" 
         }
+        
+        files = {
+            "audio": ("audio.wav", audio_bytes, "audio/wav")
+        }
+
+        data = {
+            "model": "nvidia/canary-1b",
+            "language": "pt"
+        }
+        
         resposta = requests.post(url, headers=headers, files=files, data=data)
         
         if resposta.status_code == 404:
-            url_fallback = "https://ai.api.nvidia.com/v1/audio/transcriptions"
-            data_fallback = {
-                "model": "nvidia/canary-1b",
-                "language": "pt",
-                "response_format": "json"
-            }
-            resposta = requests.post(url_fallback, headers=headers, files=files, data=data_fallback)
+            url_alt = "https://integrate.api.nvidia.com/v1/audio/transcriptions"
+            resposta = requests.post(url_alt, headers=headers, files=files, data=data)
 
         if resposta.status_code == 200:
             return resposta.json().get("text", "")

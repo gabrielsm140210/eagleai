@@ -267,17 +267,33 @@ with st.sidebar:
     historico_sessoes = listar_sessoes_do_usuario(st.session_state.usuario_id)
     
     if not historico_sessoes:
-        st.caption("Nenhum chat salvo ainda.")
+        st.caption("Nenhum chat salvos ainda.")
     else:
         for sessao in historico_sessoes:
-            label_botao = f"⚫ {sessao['titulo']}" if sessao['sessao_id'] != st.session_state.sessao_atual_id else f"🔵 {sessao['titulo']}"
-            if st.button(label_botao, key=f"sess_{sessao['sessao_id']}", use_container_width=True):
-                st.session_state.sessao_atual_id = sessao['sessao_id']
-                st.session_state.titulo_atual = sessao['titulo']
-                st.session_state.messages = carregar_historico_da_sessao(st.session_state.usuario_id, sessao['sessao_id'])
-                st.session_state.edit_index = None
-                st.session_state.edit_msg_id = None
-                st.rerun()
+            col_link, col_lixeira = st.columns([0.82, 0.18])
+            
+            with col_link:
+                label_botao = f"⚫ {sessao['titulo']}" if sessao['sessao_id'] != st.session_state.sessao_atual_id else f"🔵 {sessao['titulo']}"
+                if st.button(label_botao, key=f"sess_{sessao['sessao_id']}", use_container_width=True):
+                    st.session_state.sessao_atual_id = sessao['sessao_id']
+                    st.session_state.titulo_atual = sessao['titulo']
+                    st.session_state.messages = carregar_historico_da_sessao(st.session_state.usuario_id, sessao['sessao_id'])
+                    st.session_state.edit_index = None
+                    st.session_state.edit_msg_id = None
+                    st.rerun()
+            
+            with col_lixeira:
+                if st.button("🗑️", key=f"del_{sessao['sessao_id']}", help="Excluir esta conversa"):
+                    limpar_sessao_especifica(st.session_state.usuario_id, sessao['sessao_id'])
+
+                    if sessao['sessao_id'] == st.session_state.sessao_atual_id:
+                        st.session_state.sessao_atual_id = str(uuid.uuid4())
+                        st.session_state.titulo_atual = "Conversa Nova"
+                        st.session_state.messages = []
+                        st.session_state.edit_index = None
+                        st.session_state.edit_msg_id = None
+                        
+                    st.rerun()
 
     st.markdown("---")
 

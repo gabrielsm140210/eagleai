@@ -279,12 +279,12 @@ tavily_api_key = os.environ.get("TAVILY_API_KEY")
 if not nvidia_api_key:
     try: 
        if "NVIDIA_API_KEY" in st.secrets: nvidia_api_key = st.secrets["NVIDIA_API_KEY"]
-       except Exception: pass
+    except Exception: pass
 
 if not tavily_api_key:
     try: 
        if "TAVILY_API_KEY" in st.secrets: tavily_api_key = st.secrets["TAVILY_API_KEY"]
-       except Exception: pass
+    except Exception: pass
 
 if not nvidia_api_key or not tavily_api_key:
     with status_placeholder.container():

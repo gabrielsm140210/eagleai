@@ -9,3 +9,4 @@ langdetect>=1.0.9
 supabase>=2.31.0
 streamlit-cookies-manager>=0.2.0
 extra-streamlit-components>=0.1.71
+streamlit-mic-recorder>=0.0.16

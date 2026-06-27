@@ -7,6 +7,7 @@ from streamlit_cookies_manager import EncryptedCookieManager
 import warnings 
 import requests
 from openai import OpenAI
+import uuid
 
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
@@ -71,6 +72,11 @@ st.markdown(f"""
         font-weight: 600;
         margin-bottom: 0.4rem;
     }}
+    /* Estilização para os botões de histórico na barra lateral */
+    .stSidebar .stButton > button {{
+        text-align: left !important;
+        justify-content: flex-start !important;
+    }}
 </style>
 """, unsafe_allow_html=True)
 
@@ -105,12 +111,14 @@ def login_usuario(username, senha):
     except Exception:
         return False, None
 
-def salvar_mensagem(usuario_id, role, conteudo):
+def salvar_mensagem(usuario_id, sessao_id, role, conteudo, titulo="Conversa Nova"):
     try:
         resposta = supabase.table("historico").insert({
             "usuario_id": usuario_id,
+            "sessao_id": str(sessao_id),
             "role": role,
-            "conteudo": conteudo
+            "conteudo": conteudo,
+            "titulo_sessao": titulo[:30]
         }).execute()
         if resposta.data:
             return resposta.data[0]["id"]
@@ -118,30 +126,50 @@ def salvar_mensagem(usuario_id, role, conteudo):
         pass
     return None
 
-def carregar_historico(usuario_id):
+def carregar_historico_da_sessao(usuario_id, sessao_id):
     try:
-        resultado = supabase.table("historico").select("*").eq("usuario_id", usuario_id).order("criado_em").execute()
+        resultado = supabase.table("historico").select("*").eq("usuario_id", usuario_id).eq("sessao_id", str(sessao_id)).order("criado_em").execute()
         return [{"id": r["id"], "role": r["role"], "content": r["conteudo"]} for r in resultado.data]
     except Exception:
         return []
 
-def limpar_historico(usuario_id):
+def listar_sessoes_do_usuario(usuario_id):
     try:
-        supabase.table("historico").delete().eq("usuario_id", usuario_id).execute()
+        resultado = supabase.table("historico").select("sessao_id, titulo_sessao, criado_em").eq("usuario_id", usuario_id).order("criado_em", desc=True).execute()
+        
+        vistos = set()
+        sessoes_unicas = []
+        for r in resultado.data:
+            s_id = r["sessao_id"]
+            if s_id not in vistos and s_id != '00000000-0000-0000-0000-000000000000':
+                vistos.add(s_id)
+                sessoes_unicas.append({"sessao_id": s_id, "titulo": r["titulo_sessao"] or "Conversa Antiga"})
+        return sessoes_unicas
+    except Exception:
+        return []
+
+def limpar_sessao_especifica(usuario_id, sessao_id):
+    try:
+        supabase.table("historico").delete().eq("usuario_id", usuario_id).eq("sessao_id", str(sessao_id)).execute()
     except Exception:
         pass
 
-def deletar_historico_a_partir_de(usuario_id, message_id):
+def deletar_historico_a_partir_de(usuario_id, sessao_id, mensagem_id):
     try:
         msg = supabase.table("historico").select("criado_em").eq("id", message_id).execute()
         if msg.data:
             data_limite = msg.data[0]["criado_em"]
-            supabase.table("historico").delete().eq("usuario_id", usuario_id).gte("criado_em", data_limite).execute()
+            supabase.table("historico").delete().eq("usuario_id", usuario_id).eq("sessao_id", str(sessao_id)).gte("criado_em", data_limite).execute()
     except Exception as e:
         st.error(f"Erro ao sincronizar banco de dados: {e}")
 
 if "logout_efetuado" not in st.session_state:
     st.session_state.logout_efetuado = False
+
+if "sessao_atual_id" not in st.session_state:
+    st.session_state.sessao_atual_id = str(uuid.uuid4())
+if "titulo_atual" not in st.session_state:
+    st.session_state.titulo_atual = "Conversa Nova"
 
 if "usuario_id" not in st.session_state and not st.session_state.logout_efetuado:
     cookie_uid = cookies.get("usuario_id")
@@ -149,7 +177,7 @@ if "usuario_id" not in st.session_state and not st.session_state.logout_efetuado
     if cookie_uid and cookie_username:
         st.session_state.usuario_id = cookie_uid
         st.session_state.username = cookie_username
-        st.session_state.messages = carregar_historico(cookie_uid)
+        st.session_state.messages = carregar_historico_da_sessao(cookie_uid, st.session_state.sessao_atual_id)
 
 if "edit_index" not in st.session_state:
     st.session_state.edit_index = None
@@ -177,7 +205,7 @@ if "usuario_id" not in st.session_state:
                 if ok:
                     st.session_state.usuario_id = uid
                     st.session_state.username = username
-                    st.session_state.messages = carregar_historico(uid)
+                    st.session_state.messages = carregar_historico_da_sessao(uid, st.session_state.sessao_atual_id)
                     if lembrar:
                         cookies["usuario_id"] = str(uid)
                         cookies["username"] = str(username)
@@ -224,6 +252,33 @@ with st.sidebar:
     st.markdown("---")
 
     st.markdown(f"👤 **Usuário:** {st.session_state.username}")
+    
+    if st.button("➕ Nova Conversa", use_container_width=True, type="primary"):
+        st.session_state.sessao_atual_id = str(uuid.uuid4())
+        st.session_state.titulo_atual = "Conversa Nova"
+        st.session_state.messages = []
+        st.session_state.edit_index = None
+        st.session_state.edit_msg_id = None
+        st.rerun()
+        
+    st.markdown("---")
+
+    st.markdown("💬 **Histórico de Conversas**")
+    historico_sessoes = listar_sessoes_do_usuario(st.session_state.usuario_id)
+    
+    if not historico_sessoes:
+        st.caption("Nenhum chat salvo ainda.")
+    else:
+        for sessao in historico_sessoes:
+            label_botao = f"⚫ {sessao['titulo']}" if sessao['sessao_id'] != st.session_state.sessao_atual_id else f"🔵 {sessao['titulo']}"
+            if st.button(label_botao, key=f"sess_{sessao['sessao_id']}", use_container_width=True):
+                st.session_state.sessao_atual_id = sessao['sessao_id']
+                st.session_state.titulo_atual = sessao['titulo']
+                st.session_state.messages = carregar_historico_da_sessao(st.session_state.usuario_id, sessao['sessao_id'])
+                st.session_state.edit_index = None
+                st.session_state.edit_msg_id = None
+                st.rerun()
+
     st.markdown("---")
 
     st.markdown("⚡ **Modo de Resposta**")
@@ -241,25 +296,28 @@ with st.sidebar:
 
     st.markdown("---")
 
-    st.markdown("#### 📋 Sobre o projeto")
-    st.markdown(f"**🧠 Modelo ativo:** `{modelo_selecionado}`")
-    st.markdown("**🌐 Busca na web:** Tavily Search API")
-    st.markdown("**⚙️ Arquitetura:** LLM + Tool Calling")
+    with st.expander("⚙️ Detalhes e Status do Sistema", expanded=False):
+        st.markdown("#### 📋 Sobre o projeto")
+        st.markdown(f"**🧠 Modelo ativo:** `{modelo_selecionado}`")
+        st.markdown("**🌐 Busca na web:** Tavily Search API")
+        st.markdown("**⚙️ Arquitetura:** LLM + Tool Calling")
+        st.markdown("---")
+        st.markdown("#### 👨‍💻 Desenvolvedor")
+        st.markdown("**Feito por:** Gabriel S. Monteiro")
+        st.markdown("**Cargo:** Engenheiro e Desenvolvedor de Software")
+        st.markdown("---")
+        st.markdown("#### 📊 Status de Conexão")
+        status_placeholder = st.empty()
 
     st.markdown("---")
-    st.markdown("#### 📊 Status do Sistema")
-    
-    status_placeholder = st.empty()
-
-    st.markdown("---")
-    if st.button("🗑️ Limpar Conversa"):
-        limpar_historico(st.session_state.usuario_id)
+    if st.button("🗑️ Deletar Conversa Atual", use_container_width=True):
+        limpar_sessao_especifica(st.session_state.usuario_id, st.session_state.sessao_atual_id)
         st.session_state.messages = []
         st.session_state.edit_index = None
         st.session_state.edit_msg_id = None
         st.rerun()
         
-    if st.button("🚪 Sair"):
+    if st.button("🚪 Sair", use_container_width=True):
         if "usuario_id" in cookies:
             del cookies["usuario_id"]
         if "username" in cookies:
@@ -318,34 +376,23 @@ def transcrever_audio_nvidia(audio_bytes):
             return completion.text
         except Exception:
             pass
+            
     try:
         url = "https://ai.api.nvidia.com/v1/audio/transcriptions"
-        headers = {
-            "Authorization": f"Bearer {nvidia_api_key}",
-            "Accept": "application/json"
-        }
-        files = {
-            "audio": ("audio.wav", audio_bytes, "audio/wav")
-        }
-        data = {
-            "model": "nvidia/canary-1b",
-            "language": "pt",
-            "response_format": "json"
-        }
+        headers = {"Authorization": f"Bearer {nvidia_api_key}", "Accept": "application/json"}
+        files = {"audio": ("audio.wav", audio_bytes, "audio/wav")}
+        data = {"model": "nvidia/canary-1b", "language": "pt", "response_format": "json"}
         
         resposta = requests.post(url, headers=headers, files=files, data=data)
-        
         if resposta.status_code == 404:
             url_direct_nim = "https://ai.api.nvidia.com/v1/audio/nvidia/canary-1b"
-            data_direct = {"language": "pt", "response_format": "json"}
-            resposta = requests.post(url_direct_nim, headers=headers, files=files, data=data_direct)
+            resposta = requests.post(url_direct_nim, headers=headers, files=files, data={"language": "pt", "response_format": "json"})
             
         if resposta.status_code == 200:
             return resposta.json().get("text", "")
         else:
             return "[Aviso: Falha de comunicação com o servidor de voz da NVIDIA. Por favor, utilize o chat de texto por enquanto.]"
-            
-    except Exception as e:
+    except Exception:
         return ""
 
 
@@ -382,7 +429,7 @@ prompt = ChatPromptTemplate.from_template(template_prompt)
 cadeia_resposta = prompt | llm | StrOutputParser()
 
 if "messages" not in st.session_state:
-    st.session_state.messages = carregar_historico(st.session_state.usuario_id)
+    st.session_state.messages = carregar_historico_da_sessao(st.session_state.usuario_id, st.session_state.sessao_atual_id)
 
 for i, message in enumerate(st.session_state.messages):
     with st.chat_message(message["role"]):
@@ -442,18 +489,21 @@ if st.session_state.edit_index is not None:
                 msg_id_para_deletar = st.session_state.edit_msg_id
                 
                 if msg_id_para_deletar:
-                    deletar_historico_a_partir_de(st.session_state.usuario_id, msg_id_para_deletar)
+                    deletar_historico_a_partir_de(st.session_state.usuario_id, st.session_state.sessao_atual_id, msg_id_para_deletar)
                 
                 st.session_state.messages = st.session_state.messages[:st.session_state.edit_index]
                 
-                novo_id = salvar_mensagem(st.session_state.usuario_id, "user", novo_texto_input)
+                if st.session_state.edit_index == 0:
+                    st.session_state.titulo_atual = novo_texto_input[:25]
+                
+                novo_id = salvar_mensagem(st.session_state.usuario_id, st.session_state.sessao_atual_id, "user", novo_texto_input, st.session_state.titulo_atual)
                 st.session_state.messages.append({"id": novo_id, "role": "user", "content": novo_texto_input})
                 
                 st.session_state.edit_index = None
                 st.session_state.edit_msg_id = None
                 
                 resposta_ia = processar_resposta_ia(novo_texto_input)
-                id_ia = salvar_mensagem(st.session_state.usuario_id, "assistant", resposta_ia)
+                id_ia = salvar_mensagem(st.session_state.usuario_id, st.session_state.sessao_atual_id, "assistant", resposta_ia, st.session_state.titulo_atual)
                 st.session_state.messages.append({"id": id_ia, "role": "assistant", "content": resposta_ia})
                 
                 st.rerun()
@@ -493,7 +543,6 @@ else:
             
             if texto_transcrito and len(texto_transcrito.strip()) > 2:
                 prompt_usuario = texto_transcrito
-                
                 if "[Aviso:" in texto_transcrito:
                     st.warning(texto_transcrito)
                     prompt_usuario = None
@@ -502,7 +551,10 @@ else:
                         st.write(prompt_usuario)
 
     if prompt_usuario:
-        novo_id = salvar_mensagem(st.session_state.usuario_id, "user", prompt_usuario)
+        if not st.session_state.messages:
+            st.session_state.titulo_atual = prompt_usuario[:25]
+            
+        novo_id = salvar_mensagem(st.session_state.usuario_id, st.session_state.sessao_atual_id, "user", prompt_usuario, st.session_state.titulo_atual)
         st.session_state.messages.append({"id": novo_id, "role": "user", "content": prompt_usuario})
         st.rerun()
 
@@ -510,7 +562,7 @@ if st.session_state.messages and st.session_state.messages[-1]["role"] == "user"
     ultimo_prompt = st.session_state.messages[-1]["content"]
     resposta_ia = processar_resposta_ia(ultimo_prompt)
     
-    id_ia = salvar_mensagem(st.session_state.usuario_id, "assistant", resposta_ia)
+    id_ia = salvar_mensagem(st.session_state.usuario_id, st.session_state.sessao_atual_id, "assistant", resposta_ia, st.session_state.titulo_atual)
     st.session_state.messages.append({"id": id_ia, "role": "assistant", "content": resposta_ia})
     st.rerun()
 

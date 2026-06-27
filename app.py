@@ -309,15 +309,24 @@ with status_placeholder.container():
 
 def transcrever_audio_nvidia(audio_bytes):
     try:
-        url = "https://ai.api.nvidia.com/v1/audio/transcriptions"
+        url = "https://ai.api.nvidia.com/v1/audio/nvidia/canary-1b"
         headers = {"Authorization": f"Bearer {nvidia_api_key}"}
         files = {"audio": ("audio.wav", audio_bytes, "audio/wav")}
         data = {
-            "model": "nvidia/canary-1b",
             "language": "pt",
             "response_format": "json"
         }
         resposta = requests.post(url, headers=headers, files=files, data=data)
+        
+        if resposta.status_code == 404:
+            url_fallback = "https://ai.api.nvidia.com/v1/audio/transcriptions"
+            data_fallback = {
+                "model": "nvidia/canary-1b",
+                "language": "pt",
+                "response_format": "json"
+            }
+            resposta = requests.post(url_fallback, headers=headers, files=files, data=data_fallback)
+
         if resposta.status_code == 200:
             return resposta.json().get("text", "")
         else:
@@ -326,7 +335,7 @@ def transcrever_audio_nvidia(audio_bytes):
     except Exception as e:
         st.error(f"Erro crítico no processamento de áudio: {str(e)}")
         return ""
-
+        
 template_prompt = """
 Você é a Eagle AI, um assistente de inteligência artificial avançado criado, desenvolvido e programado por Gabriel S. Monteiro.
 

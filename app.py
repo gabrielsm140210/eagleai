@@ -104,18 +104,21 @@ def login_usuario(username, senha):
 
 def salvar_mensagem(usuario_id, role, conteudo):
     try:
-        supabase.table("historico").insert({
+        resposta = supabase.table("historico").insert({
             "usuario_id": usuario_id,
             "role": role,
             "conteudo": conteudo
         }).execute()
+        if resposta.data:
+            return resposta.data[0]["id"]
     except Exception:
         pass
+    return None
 
 def carregar_historico(usuario_id):
     try:
         resultado = supabase.table("historico").select("*").eq("usuario_id", usuario_id).order("criado_em").execute()
-        return [{"role": r["role"], "content": r["conteudo"]} for r in resultado.data]
+        return [{"id": r["id"], "role": r["role"], "content": r["conteudo"]} for r in resultado.data]
     except Exception:
         return []
 
@@ -124,6 +127,15 @@ def limpar_historico(usuario_id):
         supabase.table("historico").delete().eq("usuario_id", usuario_id).execute()
     except Exception:
         pass
+
+def deletar_historico_a_partir_de(usuario_id, mensagem_id):
+    try:
+        msg = supabase.table("historico").select("criado_em").eq("id", mensagem_id).execute()
+        if msg.data:
+            data_limite = msg.data[0]["criado_em"]
+            supabase.table("historico").delete().eq("usuario_id", usuario_id).gte("criado_em", data_limite).execute()
+    except Exception as e:
+        st.error(f"Erro ao sincronizar banco de dados: {e}")
 
 if "logout_efetuado" not in st.session_state:
     st.session_state.logout_efetuado = False
@@ -135,6 +147,12 @@ if "usuario_id" not in st.session_state and not st.session_state.logout_efetuado
         st.session_state.usuario_id = cookie_uid
         st.session_state.username = cookie_username
         st.session_state.messages = carregar_historico(cookie_uid)
+
+# ESTADOS PARA CONTROLE DE EDIÇÃO
+if "edit_index" not in st.session_state:
+    st.session_state.edit_index = None
+if "edit_msg_id" not in st.session_state:
+    st.session_state.edit_msg_id = None
 
 if "usuario_id" not in st.session_state:
     st.markdown("""
@@ -217,7 +235,7 @@ with st.sidebar:
         max_tokens_modo = 2048
     else:
         modelo_selecionado = "meta/llama-3.3-70b-instruct"
-        max_tokens_modo = 4069
+        max_tokens_modo = 4096
 
     st.markdown("---")
 
@@ -229,7 +247,7 @@ with st.sidebar:
     st.markdown("---")
     st.markdown("#### 👨‍💻 Desenvolvedor")
     st.markdown("**Feito por:** Gabriel S. Monteiro")
-    st.markdown("**Engenheiro e Desenvolvedor de Software**")
+    st.markdown("**Cargo:** Engenheiro e Desenvolvedor de Software")
 
     st.markdown("---")
     st.markdown("#### 📊 Status do Sistema")
@@ -240,6 +258,8 @@ with st.sidebar:
     if st.button("🗑️ Limpar Conversa"):
         limpar_historico(st.session_state.usuario_id)
         st.session_state.messages = []
+        st.session_state.edit_index = None
+        st.session_state.edit_msg_id = None
         st.rerun()
         
     if st.button("🚪 Sair"):
@@ -257,85 +277,42 @@ nvidia_api_key = os.environ.get("NVIDIA_API_KEY")
 tavily_api_key = os.environ.get("TAVILY_API_KEY")
 
 if not nvidia_api_key:
-    try:
-        if "NVIDIA_API_KEY" in st.secrets:
-            nvidia_api_key = st.secrets["NVIDIA_API_KEY"]
-    except Exception:
-        pass
+    try: if "NVIDIA_API_KEY" in st.secrets: nvidia_api_key = st.secrets["NVIDIA_API_KEY"]
+    except Exception: pass
 
 if not tavily_api_key:
-    try:
-        if "TAVILY_API_KEY" in st.secrets:
-            tavily_api_key = st.secrets["TAVILY_API_KEY"]
-    except Exception:
-        pass
+    try: if "TAVILY_API_KEY" in st.secrets: tavily_api_key = st.secrets["TAVILY_API_KEY"]
+    except Exception: pass
 
 if not nvidia_api_key or not tavily_api_key:
     with status_placeholder.container():
-        st.markdown(
-            f'<div class="status-{"ok" if nvidia_api_key else "error"}">'
-            f'{"🟢" if nvidia_api_key else "🔴"} IA (NVIDIA) '
-            f'{"conectada" if nvidia_api_key else "não conectada"}</div>',
-            unsafe_allow_html=True
-        )
-        st.markdown(
-            f'<div class="status-{"ok" if tavily_api_key else "error"}">'
-            f'{"🟢" if tavily_api_key else "🔴"} Busca web (Tavily) '
-            f'{"conectada" if tavily_api_key else "não conectada"}</div>',
-            unsafe_allow_html=True
-        )
-    st.info(
-        "Adicione NVIDIA_API_KEY e TAVILY_API_KEY no arquivo .env (local) "
-        "ou nos Secrets do Streamlit (deploy).",
-        icon="🔑"
-    )
+        st.markdown(f'<div class="status-{"ok" if nvidia_api_key else "error"}">{"🟢" if nvidia_api_key else "🔴"} IA (NVIDIA) Connected</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="status-{"ok" if tavily_api_key else "error"}">{"🟢" if tavily_api_key else "🔴"} Busca web (Tavily) Connected</div>', unsafe_allow_html=True)
+    st.info("Adicione os tokens de API nas configurações.", icon="🔑")
     st.stop()
 
 os.environ["TAVILY_API_KEY"] = tavily_api_key
 
-try:
-    busca_web = TavilySearchResults(max_results=5)
-except Exception as e:
-    with status_placeholder.container():
-        st.markdown('<div class="status-error">🔴 Erro ao iniciar busca web</div>', unsafe_allow_html=True)
-    st.error(f"Erro ao iniciar a ferramenta de busca (Tavily): {e}")
-    st.stop()
+try: busca_web = TavilySearchResults(max_results=5)
+except Exception: st.stop()
 
 try:
-    llm = ChatNVIDIA(
-        model=modelo_selecionado,
-        nvidia_api_key=nvidia_api_key,
-        temperature=0.3,
-        max_tokens=max_tokens_modo
-    )
-except Exception as e:
-    with status_placeholder.container():
-        st.markdown('<div class="status-error">🔴 IA não conectada</div>', unsafe_allow_html=True)
-    st.error(f"Erro ao conectar com a API da NVIDIA: {e}")
-    st.stop()
+    llm = ChatNVIDIA(model=modelo_selecionado, nvidia_api_key=nvidia_api_key, temperature=0.3, max_tokens=max_tokens_modo)
+except Exception: st.stop()
 
 with status_placeholder.container():
     st.markdown('<div class="status-ok">🟢 IA (NVIDIA) conectada</div>', unsafe_allow_html=True)
     st.markdown('<div class="status-ok">🟢 Busca web (Tavily) conectada</div>', unsafe_allow_html=True)
 
 template_prompt = """
-Você é a Eagle AI, um assistente de inteligência artificial criado por Gabriel S.
-Monteiro (Engenheiro e Desenvolvedor de Software).
+Você é a Eagle AI, um assistente de inteligência artificial avançado criado, desenvolvido e programado por Gabriel S. Monteiro.
 
 INFORMAÇÃO CRUCIAL SOBRE O SEU CRIADOR:
 Se o usuário perguntar sobre "Gabriel S. Monteiro", "Gabriel Monteiro", "Gabriel" (no contexto de criador/desenvolvedor) ou "quem te criou", use o seguinte perfil oficial para responder com orgulho e precisão:
-- Gabriel S. Monteiro é o nome abreviado e a assinatura digital e oficial de Gabriel Sanches Monteiro, Gabriel nasceu em Sorocaba-SP em 14 de Fevereiro de 2010
-- Filho de um professor de Educação Física e de uma dona de casa, Gabriel sempre conviveu com os esportes desde os 7 anos
-- Muito por conta do grande incentivo que seu pai, que te deu desde cedo a o incentivo e a prática de esportes
-- Ele ja teve o desejo de jogar basquete profissionalmente, chegou a fazer 5 seletivas, sem sucesso
-- Mas ainda aos 15 anos, após uma decepção na sua vida extra esportes, (no qual ele prefere não comentar muito sobre), já que ele se arrende disso de todas as formas 
-- Gabriel descobriu uma oportunidade de mudar de vida através do mundo do TI, através de vídeos na internet, e incentivos de pais e familiares
-- Começou a estudar muito desde então, o que ele chama de virada de chave na sua vida, hoje o mundo da técnologia faz parte de quase 100% da sua rotina 
-- Atualmente, ele é um Engenheiro e Desenvolvedor de Software, com formação pela FIAP ( Faculdade de Informática e Administração Paulista ), Ele também possui certificação em Ciência da Computação pela Fundação Estudar
-- Além da certificação que ele possui de Inteligencia Artificial pelo SENAI-SP, e dentre outras 4 certificações que ele possui atualmente
-- E ele é o fundador e a mente brilhante por trás da Eagle AI, tendo projetado toda a sua infraestrutura, desde o sistema de segurança e cookies assíncronos até a lógica de otimização de velocidade de tokens e conexão com APIs como NVIDIA e Supabase.
+- Gabriel S. Monteiro é um Engenheiro e Desenvolvedor de Software focado em Inteligência Artificial, automação de processos e arquitetura de dados.
+- Ele tem forte expertise no desenvolvimento de soluções completas (Full Stack) e integração de grandes modelos de linguagem (LLMs) com bancos de dados relacionais e ferramentas de busca em tempo real.
+- É o fundador e a mente brilhante por trás da Eagle AI, tendo projetado toda a sua infraestrutura, desde o sistema de segurança e cookies assíncronos até a lógica de otimização de velocidade de tokens e conexão com APIs como NVIDIA e Supabase.
 - Ele desenvolveu este assistente para demonstrar o poder de arquiteturas modernas de IA (LLM + Tool Calling) aplicadas ao mercado corporativo e planos de software como serviço (SaaS).
-- Apesar de tudo, com apenas 6 meses de programação, Gabriel é um jovem com um futuro brilhante pela frente!
 
 Resultados de busca na web (podem estar vazios se não foram necessários):
 ---------------------
@@ -343,10 +320,10 @@ Resultados de busca na web (podem estar vazios se não foram necessários):
 ---------------------
 
 Instruções:
-- Sempre responda de acordo, com as conversas anteriores que o usuário fez com você ( caso ele não dizer claramente que mudou de assunto )
-- Se os resultados da busca forem relevantes, use-os para enriquecer sua resposta.
+- Se perguntarem sobre o Gabriel S. Monteiro, use a informação acima como prioridade máxima e responda de forma profissional e elogiosa.
+- Se os resultados da busca forem relevantes para outros assuntos, use-os para enriquecer sua resposta e cite a fonte.
 - Se a pergunta for simples ou você já souber a resposta com segurança, responda com seu próprio conhecimento.
-- Se for usar buscas, busque por sites e notícias mais recentes, ou seja, de 2025 em diante.
+- Se for usar buscas, busque por fontes recentes, ou seja, de 2025 em diante.
 - Nunca invente dados, datas ou estatísticas. Se não tiver certeza, diga isso claramente.
 - Seja direto: evite textos longos desnecessários.
 
@@ -362,58 +339,103 @@ cadeia_resposta = prompt | llm | StrOutputParser()
 if "messages" not in st.session_state:
     st.session_state.messages = carregar_historico(st.session_state.usuario_id)
 
-for message in st.session_state.messages:
+for i, message in enumerate(st.session_state.messages):
     with st.chat_message(message["role"]):
-        st.write(message["content"])
+        if message["role"] == "user":
+            col_texto, col_btn = st.columns([0.92, 0.08])
+            with col_texto:
+                st.write(message["content"])
+            with col_btn:
+                if st.button("📝", key=f"edit_{i}", help="Editar esta mensagem"):
+                    st.session_state.edit_index = i
+                    st.session_state.edit_msg_id = message.get("id")
+                    st.rerun()
+        else:
+            st.write(message["content"])
 
-if prompt_usuario := st.chat_input("Pergunte qualquer coisa..."):
-    st.session_state.messages.append({"role": "user", "content": prompt_usuario})
-    salvar_mensagem(st.session_state.usuario_id, "user", prompt_usuario)
-    with st.chat_message("user"):
-        st.write(prompt_usuario)
-
-    with st.chat_message("assistant"):
+def processar_resposta_ia(texto_prompt):
+    try:
         try:
-            try:
-                from langdetect import detect
-                idioma_cod = detect(prompt_usuario)
-                idioma = "português" if idioma_cod == "pt" else "inglês" if idioma_cod == "en" else "espanhol" if idioma_cod == "es" else "português"
-            except Exception:
-                idioma = "português"
+            from langdetect import detect
+            idioma_cod = detect(texto_prompt)
+            idioma = "português" if idioma_cod == "pt" else "inglês" if idioma_cod == "en" else "espanhol" if idioma_cod == "es" else "português"
+        except Exception:
+            idioma = "português"
 
-            decisao_prompt = f"""Você decide se uma pergunta precisa de busca na web.
-Responda APENAS com "SIM" ou "NAO". Sem justificativas.
-Pergunta: {prompt_usuario}
-Resposta:"""
+        decisao_prompt = f"Você decide se uma pergunta precisa de busca na web. Responda APENAS com 'SIM' ou 'NAO'.\nPergunta: {texto_prompt}\nResposta:"
+        decisao = llm.invoke(decisao_prompt, max_tokens=2).content.strip().upper()
+        precisa_buscar = "SIM" in decisao
 
-            decisao = llm.invoke(decisao_prompt, max_tokens=2).content.strip().upper()
-            precisa_buscar = "SIM" in decisao
+        if precisa_buscar:
+            with st.spinner("🔎 Buscando na web..."):
+                resultados = busca_web.invoke({"query": texto_prompt})
+                contexto = "\n\n".join(f"Fonte: {r.get('url', 'desconhecida')}\nConteúdo: {r.get('content', '')}" for r in resultados)
+        else:
+            contexto = "Nenhuma busca realizada. Use seu próprio conhecimento."
 
-            if precisa_buscar:
-                with st.spinner("🔎 Buscando na web..."):
-                    resultados = busca_web.invoke({"query": prompt_usuario})
-                    contexto = "\n\n".join(
-                        f"Fonte: {r.get('url', 'desconhecida')}\nConteúdo: {r.get('content', '')}"
-                        for r in resultados
-                    )
+        with st.spinner("🦅 Gerando resposta..."):
+            resposta = cadeia_resposta.invoke({
+                "context": contexto,
+                "question": texto_prompt,
+                "idioma": idioma
+            })
+        return resposta
+    except Exception as e:
+        return f"Erro ao processar sua pergunta: {e}"
+
+if st.session_state.edit_index is not None:
+    st.markdown("---")
+    st.markdown("### ✏️ Editando mensagem anterior")
+    
+    texto_antigo = st.session_state.messages[st.session_state.edit_index]["content"]
+    novo_texto_input = st.text_area("Corrija sua pergunta:", value=texto_antigo, key="area_edicao")
+    
+    col_salvar, col_cancelar = st.columns([0.2, 0.8])
+    with col_salvar:
+        if st.button("💾 Salvar", use_container_width=True):
+            if novo_texto_input.strip() and novo_texto_input != texto_antigo:
+                msg_id_para_deletar = st.session_state.edit_msg_id
+                
+                if msg_id_para_deletar:
+                    deletar_historico_a_partir_de(st.session_state.usuario_id, msg_id_para_deletar)
+        
+                st.session_state.messages = st.session_state.messages[:st.session_state.edit_index]
+                
+                novo_id = salvar_mensagem(st.session_state.usuario_id, "user", novo_texto_input)
+                st.session_state.messages.append({"id": novo_id, "role": "user", "content": novo_texto_input})
+  
+                st.session_state.edit_index = None
+                st.session_state.edit_msg_id = None
+                
+                resposta_ia = processar_resposta_ia(novo_texto_input)
+                id_ia = salvar_mensagem(st.session_state.usuario_id, "assistant", resposta_ia)
+                st.session_state.messages.append({"id": id_ia, "role": "assistant", "content": resposta_ia})
+                
+                st.rerun()
             else:
-                contexto = "Nenhuma busca realizada. Use seu próprio conhecimento."
+                st.session_state.edit_index = None
+                st.session_state.edit_msg_id = None
+                st.rerun()
+                
+    with col_cancelar:
+        if st.button("❌ Cancelar"):
+            st.session_state.edit_index = None
+            st.session_state.edit_msg_id = None
+            st.rerun()
 
-            with st.spinner("🦅 Gerando resposta..."):
-                resposta = cadeia_resposta.invoke({
-                    "context": contexto,
-                    "question": prompt_usuario,
-                    "idioma": idioma
-                })
+else:
+    if prompt_usuario := st.chat_input("Pergunte qualquer coisa..."):
+        novo_id = salvar_mensagem(st.session_state.usuario_id, "user", prompt_usuario)
+        st.session_state.messages.append({"id": novo_id, "role": "user", "content": prompt_usuario})
+        st.rerun()
 
-            st.write(resposta)
-            st.session_state.messages.append({"role": "assistant", "content": resposta})
-            salvar_mensagem(st.session_state.usuario_id, "assistant", resposta)
-
-        except Exception as e:
-            erro_msg = f"Erro ao processar sua pergunta: {e}"
-            st.error(erro_msg)
-            st.session_state.messages.append({"role": "assistant", "content": erro_msg})
+if st.session_state.messages and st.session_state.messages[-1]["role"] == "user" and st.session_state.edit_index is None:
+    ultimo_prompt = st.session_state.messages[-1]["content"]
+    resposta_ia = processar_resposta_ia(ultimo_prompt)
+    
+    id_ia = salvar_mensagem(st.session_state.usuario_id, "assistant", resposta_ia)
+    st.session_state.messages.append({"id": id_ia, "role": "assistant", "content": resposta_ia})
+    st.rerun()
 
 st.markdown(
     "<div style='text-align:center; color:gray; font-size:0.8rem; margin-top:2rem;'>"

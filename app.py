@@ -441,7 +441,7 @@ def processar_resposta_ia(texto_prompt):
         for msg in st.session_state.messages[-3:-1]:
             role_label = "Usuário" if msg["role"] == "user" else "Eagle AI"
             historico_breve += f"{role_label}: {msg['content']}\n"
-            
+
         decisao_prompt = (
             f"Você é um classificador de buscas em tempo real. Analise o contexto do chat e decida se a última pergunta exige dados atualizados da internet "
             f"(como eventos atuais de 2026, transmissões de TV, notícias, placares ou fatos recentes). "
@@ -456,14 +456,22 @@ def processar_resposta_ia(texto_prompt):
         precisa_buscar = "SIM" in decisao_msg
 
         if not precisa_buscar and any(termo in historico_breve.lower() for termo in ["copa", "jogo", "transmiss", "futebol", "assistir", "passar"]):
-            if len(texto_prompt.strip()) < 25:
+            if len(texto_prompt.strip()) < 30:
                 precisa_buscar = True
 
         if precisa_buscar:
             with st.spinner("🔎 Buscando na web..."):
-                query_busca = texto_prompt
-                if len(texto_prompt.strip()) < 15 and "copa" in historico_breve.lower():
-                    query_busca = f"Copa do Mundo 2026 onde assistir {texto_prompt}"
+                if len(texto_prompt.strip()) < 35:
+                    prompt_otimizador = (
+                        f"Com base no histórico recente de chat abaixo, reescreva a última pergunta do usuário em uma única linha contendo "
+                        f"uma frase curta e objetiva perfeita para pesquisa no Google. Não use saudações, responda apenas a frase direta de busca.\n\n"
+                        f"Histórico:\n{historico_breve}\n"
+                        f"Última pergunta ambígua: {texto_prompt}\n"
+                        f"Query ideal para o Google:"
+                    )
+                    query_busca = llm.invoke([HumanMessage(content=prompt_otimizador)], max_tokens=25).content.strip().replace('"', '')
+                else:
+                    query_busca = texto_prompt
                     
                 resultados = busca_web.invoke({"query": query_busca})
                 contexto_web = "\n\n".join(f"Fonte: {r.get('url', 'desconhecida')}\nConteúdo: {r.get('content', '')}" for r in resultados)
@@ -479,7 +487,7 @@ Você é a Eagle AI, um assistente de inteligência artificial avançado criado,
 
 INFORMAÇÃO CRUCIAL SOBRE O SEU CRIADOR:
 Se o usuário perguntar sobre "Gabriel S. Monteiro", "Gabriel Monteiro", "Gabriel" (no contexto de criador/desenvolvedor) ou "quem te criou", use o seguinte perfil oficial para responder com orgulho e precisão:
-- Gabriel S. Monteiro é um Engenheiro e Desenvolvedor de Software focado em Inteligência Artificial, automação de processos e arquitetura de dados.
+- Gabriel S. Monteiro é um Engenheiro e Desenvolvedor de Software focado in Inteligência Artificial, automação de processos e arquitetura de dados.
 - Ele tem forte expertise no desenvolvimento de soluções completas (Full Stack) e integração de grandes modelos de linguagem (LLMs) com bancos de dados relacionais e ferramentas de busca em tempo real.
 - É o fundador e a mente brilhante por trás da Eagle AI, tendo projetado toda a sua infraestrutura, desde o sistema de segurança e cookies assíncronos até a lógica de otimização de velocidade de tokens e conexão com APIs como NVIDIA e Supabase.
 - Ele desenvolveu este assistente para demonstrar o poder de arquiteturas modernas de IA (LLM + Tool Calling) aplicadas ao mercado corporativo e planos de software como serviço (SaaS).
@@ -491,6 +499,7 @@ Resultados RECENTES de busca na web (Priorize ESSES dados em vez da sua memória
 
 Instruções de Resposta:
 - REJEITE dados obsoletos de sua memória interna. Confie nos resultados da pesquisa acima para transmissões de TV atuais e estádios oficiais da Copa de 2026.
+- ATENÇÃO AO CONTEXTO DA CONVERSA: Garanta que você está respondendo ao tópico correto do usuário (ex: se o chat é sobre futebol/copa, continue respondendo sobre futebol/copa, ignore dados irrelevantes de busca).
 - Se perguntarem sobre o Gabriel S. Monteiro, use a informação dele como prioridade máxima e responda de forma profissional e elogiosa.
 - Se a pergunta for simples ou os resultados de busca forem irrelevantes, use seu conhecimento básico atualizado para 2026.
 - Nunca invente dados, canais de televisão obsoletos ou estatísticas falsas. Se não encontrar a informação na busca, diga isso claramente.

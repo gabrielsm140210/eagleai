@@ -309,34 +309,39 @@ with status_placeholder.container():
 
 def transcrever_audio_nvidia(audio_bytes):
     try:
-        url = "https://ai.api.nvidia.com/v1/audio/transcriptions"
-        
+        from langchain_nvidia_ai_endpoints import NVIDIAEmbeddings, ChatNVIDIA
+        import json
+
+        cliente_audio = ChatNVIDIA(
+            model="nvidia/canary-1b", 
+            nvidia_api_key=nvidia_api_key
+        )
+
         headers = {
             "Authorization": f"Bearer {nvidia_api_key}",
-
-            "Accept": "application/json" 
-        }
-        
-        files = {
-            "audio": ("audio.wav", audio_bytes, "audio/wav")
+            "Accept": "application/json"
         }
 
-        data = {
-            "model": "nvidia/canary-1b",
-            "language": "pt"
-        }
+        url_unificada = "https://ai.api.nvidia.com/v1/v1/chat/completions" 
+        url_audio_real = "https://ai.api.nvidia.com/v1/audio/transcriptions"
+
+        url_core = "https://api.nvidia.com/v1/audio/transcriptions"
         
-        resposta = requests.post(url, headers=headers, files=files, data=data)
+        files = {"audio": ("audio.wav", audio_bytes, "audio/wav")}
+        data = {"model": "nvidia/canary-1b", "language": "pt"}
         
+        resposta = requests.post(url_core, headers=headers, files=files, data=data)
+
         if resposta.status_code == 404:
-            url_alt = "https://integrate.api.nvidia.com/v1/audio/transcriptions"
-            resposta = requests.post(url_alt, headers=headers, files=files, data=data)
+            url_modelo_direto = "https://ai.api.nvidia.com/v1/models/nvidia/canary-1b"
+            resposta = requests.post(url_modelo_direto, headers=headers, files=files, data=data)
 
         if resposta.status_code == 200:
             return resposta.json().get("text", "")
         else:
             st.error(f"Erro na API da NVIDIA ({resposta.status_code}): {resposta.text}")
             return ""
+            
     except Exception as e:
         st.error(f"Erro crítico no processamento de áudio: {str(e)}")
         return ""

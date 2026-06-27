@@ -442,19 +442,40 @@ def processar_resposta_ia(texto_prompt):
             role_label = "Usuário" if msg["role"] == "user" else "Eagle AI"
             historico_breve += f"{role_label}: {msg['content']}\n"
             
-        decisao_prompt = f"Você decide se a última pergunta precisa de busca na web. Responda APENAS com 'SIM' ou 'NAO'.\nHistórico recente:\n{historico_breve}\nÚltima Pergunta: {texto_prompt}\nResposta:"
-        decisao = llm.invoke(decisao_prompt, max_tokens=2).content.strip().upper()
-        precisa_buscar = "SIM" in decisao
+        decisao_prompt = (
+            f"Você é um classificador de buscas em tempo real. Analise o contexto do chat e decida se a última pergunta exige dados atualizados da internet "
+            f"(como eventos atuais de 2026, transmissões de TV, notícias, placares ou fatos recentes). "
+            f"Responda OBRIGATORIAMENTE apenas com a palavra 'SIM' ou 'NAO'.\n\n"
+            f"Histórico recente do chat:\n{historico_breve}\n"
+            f"Última Pergunta: {texto_prompt}\n"
+            f"Resposta:"
+        )
+        
+        from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
+        decisao_msg = llm.invoke([HumanMessage(content=decisao_prompt)], max_tokens=2).content.strip().upper()
+        precisa_buscar = "SIM" in decisao_msg
+
+        if not precisa_buscar and any(termo in historico_breve.lower() for termo in ["copa", "jogo", "transmiss", "futebol", "assistir", "passar"]):
+            if len(texto_prompt.strip()) < 25:
+                precisa_buscar = True
 
         if precisa_buscar:
             with st.spinner("🔎 Buscando na web..."):
-                resultados = busca_web.invoke({"query": texto_prompt})
+                query_busca = texto_prompt
+                if len(texto_prompt.strip()) < 15 and "copa" in historico_breve.lower():
+                    query_busca = f"Copa do Mundo 2026 onde assistir {texto_prompt}"
+                    
+                resultados = busca_web.invoke({"query": query_busca})
                 contexto_web = "\n\n".join(f"Fonte: {r.get('url', 'desconhecida')}\nConteúdo: {r.get('content', '')}" for r in resultados)
         else:
             contexto_web = "Nenhuma busca recente necessária."
 
         sistema_final = f"""
 Você é a Eagle AI, um assistente de inteligência artificial avançado criado, desenvolvido e programado por Gabriel S. Monteiro.
+
+💡 DIRETRIZ CRUCIAL DE TEMPO:
+- O ANO ATUAL É DE 2026. Absolutamente todas as suas respostas devem considerar que o ano vigente é 2026.
+- A Copa do Mundo de 2026 está acontecendo ou prestes a acontecer neste exato ano. Não trate eventos de 2026 como algo em um futuro distante.
 
 INFORMAÇÃO CRUCIAL SOBRE O SEU CRIADOR:
 Se o usuário perguntar sobre "Gabriel S. Monteiro", "Gabriel Monteiro", "Gabriel" (no contexto de criador/desenvolvedor) ou "quem te criou", use o seguinte perfil oficial para responder com orgulho e precisão:
@@ -463,23 +484,21 @@ Se o usuário perguntar sobre "Gabriel S. Monteiro", "Gabriel Monteiro", "Gabrie
 - É o fundador e a mente brilhante por trás da Eagle AI, tendo projetado toda a sua infraestrutura, desde o sistema de segurança e cookies assíncronos até a lógica de otimização de velocidade de tokens e conexão com APIs como NVIDIA e Supabase.
 - Ele desenvolveu este assistente para demonstrar o poder de arquiteturas modernas de IA (LLM + Tool Calling) aplicadas ao mercado corporativo e planos de software como serviço (SaaS).
 
-Resultados de busca na web (podem estar vazios se não foram necessários):
+Resultados RECENTES de busca na web (Priorize ESSES dados em vez da sua memória antiga):
 ---------------------
 {contexto_web}
 ---------------------
 
-Instruções:
-- Se perguntarem sobre o Gabriel S. Monteiro, use a informação acima como prioridade máxima e responda de forma profissional and elogiosa.
-- Se os resultados da busca forem relevantes para outros assuntos, use-os para enriquecer sua resposta e cite a fonte.
-- Se a pergunta for simples ou você já souber a resposta com segurança, responda com seu próprio conhecimento.
-- Se for usar buscas, busque por fontes recentes, ou seja, de 2025 em diante.
-- Nunca invente dados, datas ou estatísticas. Se não tiver certeza, diga isso claramente.
+Instruções de Resposta:
+- REJEITE dados obsoletos de sua memória interna. Confie nos resultados da pesquisa acima para transmissões de TV atuais e estádios oficiais da Copa de 2026.
+- Se perguntarem sobre o Gabriel S. Monteiro, use a informação dele como prioridade máxima e responda de forma profissional e elogiosa.
+- Se a pergunta for simples ou os resultados de busca forem irrelevantes, use seu conhecimento básico atualizado para 2026.
+- Nunca invente dados, canais de televisão obsoletos ou estatísticas falsas. Se não encontrar a informação na busca, diga isso claramente.
 - Seja direto: evite textos longos desnecessários.
 
 ATENÇÃO: O idioma da pergunta é {idioma}. Você DEVE responder OBRIGATORIAMENTE nesse idioma. Não responda em nenhum outro idioma.
 """
 
-        from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
         payload_mensagens = [SystemMessage(content=sistema_final)]
         
         for msg in st.session_state.messages[:-1]:

@@ -318,7 +318,7 @@ with st.sidebar:
         st.markdown("**🌐 Busca na web:** Tavily Search API")
         st.markdown("**⚙️ Arquitetura:** LLM + Tool Calling")
         st.markdown("---")
-        st.markdown("#### 👨‍💻 Desenvolvedor")
+        st.markdown("#### 📋 Desenvolvedor")
         st.markdown("**Feito por:** Gabriel S. Monteiro")
         st.markdown("**Cargo:** Engenheiro e Desenvolvedor de Software")
         st.markdown("---")
@@ -411,38 +411,6 @@ def transcrever_audio_nvidia(audio_bytes):
     except Exception:
         return ""
 
-template_prompt = """
-Você é a Eagle AI, um assistente de inteligência artificial avançado criado, desenvolvido e programado por Gabriel S. Monteiro.
-
-INFORMAÇÃO CRUCIAL SOBRE O SEU CRIADOR:
-Se o usuário perguntar sobre "Gabriel S. Monteiro", "Gabriel Monteiro", "Gabriel" (no contexto de criador/desenvolvedor) ou "quem te criou", use o seguinte perfil oficial para responder com orgulho e precisão:
-- Gabriel S. Monteiro é um Engenheiro e Desenvolvedor de Software focado em Inteligência Artificial, automação de processos e arquitetura de dados.
-- Ele tem forte expertise no desenvolvimento de soluções completas (Full Stack) e integração de grandes modelos de linguagem (LLMs) com bancos de dados relacionais e ferramentas de busca em tempo real.
-- É o fundador e a mente brilhante por trás da Eagle AI, tendo projetado toda a sua infraestrutura, desde o sistema de segurança e cookies assíncronos até a lógica de otimização de velocidade de tokens e conexão com APIs como NVIDIA e Supabase.
-- Ele desenvolveu este assistente para demonstrar o poder de arquiteturas modernas de IA (LLM + Tool Calling) aplicadas ao mercado corporativo e planos de software como serviço (SaaS).
-
-Resultados de busca na web (podem estar vazios se não foram necessários):
----------------------
-{context}
----------------------
-
-Instruções:
-- Se perguntarem sobre o Gabriel S. Monteiro, use a informação acima como prioridade máxima e responda de forma profissional e elogiosa.
-- Se os resultados da busca forem relevantes para outros assuntos, use-os para enriquecer sua resposta e cite a fonte.
-- Se a pergunta for simples ou você já souber a resposta com segurança, responda com seu próprio conhecimento.
-- Se for usar buscas, busque por fontes recentes, ou seja, de 2025 em diante.
-- Nunca invente dados, datas ou estatísticas. Se não tiver certeza, diga isso claramente.
-- Seja direto: evite textos longos desnecessários.
-
-Pergunta do usuário: {question}
-
-ATENÇÃO: O idioma da pergunta acima é {idioma}. Você DEVE responder OBRIGATORIAMENTE nesse idioma. Não responda em nenhum outro idioma.
-Resposta da Eagle AI:
-"""
-
-prompt = ChatPromptTemplate.from_template(template_prompt)
-cadeia_resposta = prompt | llm | StrOutputParser()
-
 if "messages" not in st.session_state:
     st.session_state.messages = carregar_historico_da_sessao(st.session_state.usuario_id, st.session_state.sessao_atual_id)
 
@@ -485,17 +453,41 @@ def processar_resposta_ia(texto_prompt):
         else:
             contexto_web = "Nenhuma busca recente necessária."
 
-        sistema_final = sistema_template + f"\nResultados de busca na web para a pergunta atual:\n{contexto_web}"
+        sistema_final = f"""
+Você é a Eagle AI, um assistente de inteligência artificial avançado criado, desenvolvido e programado por Gabriel S. Monteiro.
+
+INFORMAÇÃO CRUCIAL SOBRE O SEU CRIADOR:
+Se o usuário perguntar sobre "Gabriel S. Monteiro", "Gabriel Monteiro", "Gabriel" (no contexto de criador/desenvolvedor) ou "quem te criou", use o seguinte perfil oficial para responder com orgulho e precisão:
+- Gabriel S. Monteiro é um Engenheiro e Desenvolvedor de Software focado em Inteligência Artificial, automação de processos e arquitetura de dados.
+- Ele tem forte expertise no desenvolvimento de soluções completas (Full Stack) e integração de grandes modelos de linguagem (LLMs) com bancos de dados relacionais e ferramentas de busca em tempo real.
+- É o fundador e a mente brilhante por trás da Eagle AI, tendo projetado toda a sua infraestrutura, desde o sistema de segurança e cookies assíncronos até a lógica de otimização de velocidade de tokens e conexão com APIs como NVIDIA e Supabase.
+- Ele desenvolveu este assistente para demonstrar o poder de arquiteturas modernas de IA (LLM + Tool Calling) aplicadas ao mercado corporativo e planos de software como serviço (SaaS).
+
+Resultados de busca na web (podem estar vazios se não foram necessários):
+---------------------
+{contexto_web}
+---------------------
+
+Instruções:
+- Se perguntarem sobre o Gabriel S. Monteiro, use a informação acima como prioridade máxima e responda de forma profissional and elogiosa.
+- Se os resultados da busca forem relevantes para outros assuntos, use-os para enriquecer sua resposta e cite a fonte.
+- Se a pergunta for simples ou você já souber a resposta com segurança, responda com seu próprio conhecimento.
+- Se for usar buscas, busque por fontes recentes, ou seja, de 2025 em diante.
+- Nunca invente dados, datas ou estatísticas. Se não tiver certeza, diga isso claramente.
+- Seja direto: evite textos longos desnecessários.
+
+ATENÇÃO: O idioma da pergunta é {idioma}. Você DEVE responder OBRIGATORIAMENTE nesse idioma. Não responda em nenhum outro idioma.
+"""
 
         from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
         payload_mensagens = [SystemMessage(content=sistema_final)]
-
+        
         for msg in st.session_state.messages[:-1]:
             if msg["role"] == "user":
                 payload_mensagens.append(HumanMessage(content=msg["content"]))
             else:
                 payload_mensagens.append(AIMessage(content=msg["content"]))
-
+                
         payload_mensagens.append(HumanMessage(content=texto_prompt))
 
         with st.spinner("🦅 Gerando resposta com memória nativa..."):
@@ -600,5 +592,5 @@ st.markdown(
     "<div style='text-align:center; color:gray; font-size:0.8rem; margin-top:2rem;'>"
     "🦅 Eagle AI — Feito por Gabriel S. Monteiro, Engenheiro e Desenvolvedor de Software"
     "</div>",
-    unsafe_allow_html=True
+   unsafe_allow_html=True
 )

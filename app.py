@@ -310,27 +310,38 @@ with status_placeholder.container():
 
 def transcrever_audio_nvidia(audio_bytes):
     try:
-        client = OpenAI(
-            base_url="https://integrate.api.nvidia.com/v1",
-            api_key=nvidia_api_key
-        )
+        url = "https://ai.api.nvidia.com/v1/audio/transcriptions"
+        
+        headers = {
+            "Authorization": f"Bearer {nvidia_api_key}",
+            "Accept": "application/json"
+        }
+        
+        files = {
+            "audio": ("audio.wav", audio_bytes, "audio/wav")
+        }
 
-        audio_file_tuple = ("audio.wav", audio_bytes, "audio/wav")
+        data = {
+            "model": "nvidia/canary-1b",
+            "language": "pt",
+            "response_format": "json"
+        }
         
-        completion = client.audio.transcriptions.create(
-            model="nvidia/canary-1b",
-            file=audio_file_tuple,
-            response_format="json"
-        )
-        
-        if hasattr(completion, 'text'):
-            return completion.text
-        elif isinstance(completion, dict):
-            return completion.get("text", "")
-        return ""
-        
+        resposta = requests.post(url, headers=headers, files=files, data=data)
+
+        if resposta.status_code == 404:
+            url_direta = "https://ai.api.nvidia.com/v1/audio/nvidia/canary-1b"
+            data_direta = {"language": "pt", "response_format": "json"}
+            resposta = requests.post(url_direta, headers=headers, files=files, data=data_direta)
+
+        if resposta.status_code == 200:
+            return resposta.json().get("text", "")
+        else:
+            st.error(f"Erro na API da NVIDIA ({resposta.status_code}): {resposta.text}")
+            return ""
+            
     except Exception as e:
-        st.error(f"Erro no processamento nativo de áudio (NVIDIA/OpenAI SDK): {str(e)}")
+        st.error(f"Erro crítico no processamento de áudio: {str(e)}")
         return ""
 
 

@@ -1,9 +1,13 @@
 streamlit
+streamlit-mic-recorder
+streamlit-cookies-manager
 supabase
+python-dotenv
 langchain-core
 langchain-nvidia-ai-endpoints
 langchain-community
 tavily-python
-streamlit-cookies-manager
-streamlit-mic-recorder
 langdetect
+openai
+urllib3
+requests
